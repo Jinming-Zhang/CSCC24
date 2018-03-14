@@ -28,14 +28,18 @@ albertProg = do
       \e -> throw (Other "input too short")
 
 -- Pick one to uncomment.
--- newtype Feeder a = FeederOf ([Char] -> Either ([Char], Exception a))
+newtype Feeder a = FeederOf {getFeeder :: [Char] -> Either Exception ([Char], a)}
 -- newtype Feeder a = FeederOf ([Char] -> ([Char], Either Exception a))
 -- newtype Feeder a = FeederOf ([Char] -> Either Exception a)
 
 -- Run the Feeder program with the string as input source.
 -- Return a Left for uncaught exception, a Right for normal return.
 runFeeder :: Feeder a -> String -> Either Exception a
-runFeeder = error "TODO"
+runFeeder (FeederOf f) str = case f str of Left exception -> Left exception
+                                           Right (fir, sec) -> Right sec
+
+--getB :: Feeder a -> a
+--getB FeederOf f = (\x-> x)
 
 testAlbertProg :: String -> Either Exception String
 testAlbertProg = runFeeder albertProg
@@ -44,14 +48,33 @@ test1 = testAlbertProg "ALBERT"
 test2 = testAlbertProg "LABERT"
 test3 = testAlbertProg "A"
 
+
 instance Functor Feeder where
     fmap = liftM
 instance Applicative Feeder where
-    pure a = return a
+    pure a = return a    -- User can throw an exception manually.
     (<*>) = ap
-
+ 
 instance Monad Feeder where
--- TODO
+    -- return the feeded string
+    return x = FeederOf (\str -> Right (str, x))
+    -- depends on the result of the givin feeder on the string, either raise an exception or
+    (>>=) (FeederOf func) f = (FeederOf (\str -> case func str of Left exception -> Left exception
+                                                                  -- unwrape the feeder function out of f, and apply to the result
+                                                                  Right (res, a) -> getFeeder (f a) res))
 
 instance MonadGetChar Feeder where
--- TODO
+    --get :: f Char
+    -- Read and return a character. Throw EOF if no more to read.
+    get = FeederOf (\str -> case str of [] -> Left EOF
+                                        (char:rst) -> Right (rst,char))
+    -- throw :: Exception -> f a
+    -- User can throw an exception manually.
+    throw exception = FeederOf (\str -> Left exception)
+
+    -- Catch and handle an exception.
+    -- catch :: f a -> (Exception -> f a) -> f a
+                                                                                   -- apply f and get the result feeder
+    catch (FeederOf func) f = FeederOf (\str -> case func str of Left exception -> getFeeder (f exception) str
+                                                                 Right (res, a) -> Right (res, a))
+                                                                
